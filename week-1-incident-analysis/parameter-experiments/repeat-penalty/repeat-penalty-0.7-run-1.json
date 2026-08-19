@@ -1,0 +1,8 @@
+{
+  "known_facts": [
+    "At 10:01 UTC: Deployment 'dep-1842' for 'checkout-api' completed.",
+    "At 10:04 UTC: The 'checkout' error-rate alert fired.",
+    "At 10:04 UTC: The 'checkout' error-rate increased.",
+    "At 10:04 UTC: The 'checkout' error-rate increased 10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+]
+}

@@ -1,0 +1,67 @@
+{
+  "known_facts": [
+    "At 10:04 UTC, the checkout error-rate alert fired with an increase from 0.4% to 9%.",
+    "Deployment dep-1842 for checkout-api completed at 10:01 UTC.",
+    "Database latency increased around the same time as the checkout errors and payment provider issues."
+  ],
+  "assumptions": [],
+  "missing_information": [
+    "The exact timing of database latency increase relative to deployment completion.",
+    "Details on any changes made during deployment dep-1842 that could have affected the checkout process or database performance.",
+    "Logs from the checkout-api and related services around the time of the incident."
+  ],
+  "candidate_hypotheses": [
+    {
+      "hypothesis": "The increase in checkout error-rate is due to a change introduced during deployment dep-1842.",
+      "supporting_evidence": [
+        "Checkout errors started immediately after the deployment completion at 10:01 UTC."
+      ],
+      "contradicting_evidence": [],
+      "evidence_needed": [
+        "Deployment logs and code changes for dep-1842",
+        "Pre-deployment and post-deployment performance metrics"
+      ]
+    },
+    {
+      "hypothesis": "Database latency increase is due to a database-related issue that coincided with the deployment.",
+      "supporting_evidence": [
+        "Database latency increased around the same time as checkout errors."
+      ],
+      "contradicting_evidence": [],
+      "evidence_needed": [
+        "Database performance logs and metrics before, during, and after the incident"
+      ]
+    },
+    {
+      "hypothesis": "The external payment provider's intermittent errors are unrelated to this incident.",
+      "supporting_evidence": [
+        "External payment provider reported intermittent issues."
+      ],
+      "contradicting_evidence": [],
+      "evidence_needed": [
+        "Payment provider logs and status reports"
+      ]
+    },
+    {
+      "hypothesis": "The expired service credential is the root cause of this incident.",
+      "supporting_evidence": [
+        "A previous similar incident involved an expired service credential."
+      ],
+      "contradicting_evidence": [],
+      "evidence_needed": [
+        "Service credentials used by checkout-api and related services"
+      ]
+    }
+  ],
+  "reversible_next_actions": [
+    {
+      "action": "Roll back deployment dep-1842 to the previous version if there is strong evidence that it introduced issues.",
+      "rationale": "If rollback can be done without significant impact on other systems."
+    },
+    {
+      "action": "Monitor database performance and checkout error rates after rollback or further investigation.",
+      "rationale": "To confirm whether the rollback resolves the issue."
+    }
+  ],
+  "uncertainty_statement": "There is insufficient evidence to conclusively determine the root cause of this incident. Further investigation, including reviewing deployment logs, service credentials, and database performance metrics, is required before taking irreversible actions such as rolling back the deployment."
+}

@@ -1,0 +1,51 @@
+{
+  "known_facts": [
+    "At 10:04 UTC, the checkout error-rate alert fired with an increase from 0.4% to 9%.",
+    "Deployment dep-1842 for checkout-api completed at 10:01 UTC.",
+    "Database latency increased around the same time as the checkout errors and payment provider issues."
+  ],
+  "assumptions": [],
+  "missing_information": [
+    "The exact timing of when database latency started to increase.",
+    "Details about the nature of the intermittent errors reported by the external payment provider.",
+    "Whether any changes were made in the service credentials prior to or during this incident."
+  ],
+  "candidate_hypotheses": [
+    {
+      "hypothesis": "The increased checkout error-rate and database latency are caused by a misconfiguration or bug introduced in deployment dep-1842.",
+      "supporting_evidence": [
+        "Deployment occurred just before the issue started, which could indicate that new code or configuration changes were introduced."
+      ],
+      "contradicting_evidence": [],
+      "evidence_needed": [
+        "Logs from the deployment to identify any issues during the process.",
+        "Any unit tests or integration tests that failed in dep-1842."
+      ]
+    },
+    {
+      "hypothesis": "The increased checkout error-rate and database latency are due to an issue with the external payment provider, which may have caused a cascading effect on other systems.",
+      "supporting_evidence": [
+        "External payment provider reported intermittent errors at around the same time."
+      ],
+      "contradicting_evidence": [],
+      "evidence_needed": [
+        "Details about the nature of the payment provider's issues and their impact on the checkout system."
+      ]
+    },
+    {
+      "hypothesis": "The increased checkout error-rate and database latency are caused by an expired service credential.",
+      "supporting_evidence": [
+        "A previous incident with similar symptoms involved an expired service credential."
+      ],
+      "contradicting_evidence": [],
+      "evidence_needed": [
+        "Confirmation that the relevant service credentials were not recently updated or renewed."
+      ]
+    }
+  ],
+  "reversible_next_actions": [
+    "Roll back deployment dep-1842 to the previous version.",
+    "Temporarily disable the external payment provider's integration if it is suspected of causing issues, pending further investigation."
+  ],
+  "uncertainty_statement": "The root cause of this incident has not been confirmed. There are multiple potential causes that need to be investigated further before any irreversible decisions can be made. Rolling back deployment or disabling third-party integrations should only proceed after a thorough investigation and analysis of the evidence."
+}

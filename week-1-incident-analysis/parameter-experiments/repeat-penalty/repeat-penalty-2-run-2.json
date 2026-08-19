@@ -1,0 +1,45 @@
+
+{
+"known_facts":[  
+   {"fact":"At UTC:10.4, checkout error-rate alert fired with an increase from a previous rate of ~9%."}, 
+    {"" :{"event_time":""}}, // [to be filled]
+  "assumptions": [],
+	missing_information:[],
+	candidate_hypotheses:[
+	  {
+		  hypothesis:"Deployment dep-1824 might have introduced bugs that lead to increased checkout error-rates.",  
+		 supporting_evidence: ["Checkout API was deployed at UTC time of ~9.0 minutes before the alert fired"], 
+          contradictingEvidence:["The deployment timestamp is earlier than when issues were first noticed."],     
+           evidence_needed:[]
+      },
+	  {
+		  hypothesis:"Service credential used for external payment provider might be expired or compromised.",  
+		 supporting_evidence: ["A previous incident involved anexpired servicecredential", "Externalpaymentprovider reported intermittent errors"], 
+          contradictingEvidence:["No logs indicate a change to the credentials around that time."],     
+           evidence_needed:[]
+      },
+       {
+		  hypothesis:"Database latency issues are related, and might be caused by external factors.",  
+		 supporting_evidence: ["The checkout error rate increased at approximately same as database latencies", "External payment provider reported errors"], 
+          contradictingEvidence:["No direct correlation between the db query timesandcheckouterrortimes."],     
+           evidence_needed:[]
+      },
+       {
+		  hypothesis:"Increased traffic to system has overloaded servers.",  
+		 supporting_evidence: [], // [to be filled]   
+         contradicted_by:Evidenccetobeadded,
+          neededEvidence:["Traffic logs around the time of incident."]
+        }
+     ],
+	reversible_next_actions:[
+	{"action":"Roll back deployment dep-1824","easily_reverted":true},
+    { "rollback_db_changes" : true },
+   {"restart_services_related_to_checkout_api", easilyRevertible:true}
+       {
+         action:"Update the external payment provider credentials",
+          if:("Credentialexpiredorcompromised"),
+        }
+	],
+  uncertainty_statement:
+     ("There is insufficient evidence to confirm any one hypothesis as definitive, and it's important not treat correlationascausation. We must await further investigationto identifythe rootcauseof the issues.")
+}
