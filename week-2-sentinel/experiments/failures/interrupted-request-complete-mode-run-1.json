@@ -1,0 +1,8 @@
+{
+  "accepted": false,
+  "failure": {
+    "category": "runtime",
+    "code": "interrupted-request",
+    "message": "Request interrupted before a completed response was received."
+  }
+}

@@ -1,0 +1,105 @@
+{
+  "is_error": false,
+  "duration_api_ms": 12083,
+  "num_turns": 1,
+  "stop_reason": "end_turn",
+  "session_id": "23a18cac-68d8-4be7-ba84-b81b0e8da399",
+  "total_cost_usd": 0.009432999999999999,
+  "usage": {
+    "input_tokens": 200,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "output_tokens": 805,
+    "output_tokens_details": {
+      "thinking_tokens": 0
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 0,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 200,
+        "output_tokens": 805,
+        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": 0,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 0
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 908,
+      "outputTokens": 15,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.000983,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 200,
+      "outputTokens": 805,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.00845,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "sdk_opt_in_required",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "# Why Valid JSON ≠ Valid Reasoning\n\nJSON validity and conclusion validity operate at completely different levels of a response, so satisfying one says nothing about the other.\n\n## The Core Distinction\n\n**JSON validity** is a *syntactic* property: it checks whether the text conforms to the JSON grammar—matched brackets, properly quoted strings, correct comma placement, valid data types. A parser only asks: \"Can this be structurally decoded?\"\n\n**Conclusion support** is a *semantic/epistemic* property: it checks whether the content of a claim follows from evidence, premises, or data. This requires evaluating meaning, logic, and factual grounding—something no JSON parser does.\n\n## How This Plays Out in Practice\n\n1. **The schema constrains form, not truth**\n   A field like `\"conclusion\": \"X causes Y\"` only needs to be a valid string. Nothing enforces that X actually causes Y, that evidence was cited, or that the reasoning is sound.\n\n2. **Models can fill fields with fabricated or unjustified content**\n   An LLM (or any system) can produce perfectly formatted JSON while:\n   - Hallucinating facts\n   - Skipping logical steps\n   - Overgeneralizing from limited data\n   - Citing sources that don't say what's claimed\n\n3. **Validators check keys/types, not logic**\n   A JSON Schema might require `\"confidence\": number` and `\"reasoning\": string`, but it can't verify that the reasoning *actually supports* the confidence level or conclusion stated.\n\n4. **Structure can create false authority**\n   Rigid, well-formatted output *looks* rigorous, which can make unsupported claims seem more credible than they are—a kind of \"structure laundering.\"\n\n## Simple Example\n\n```json\n{\n  \"conclusion\": \"This drug is safe for all patients\",\n  \"evidence\": \"Trial showed no side effects in 5 participants\",\n  \"confidence\": \"high\"\n}\n```\n\nThis is **100% valid JSON**. But the conclusion is **not supported**—a 5-person trial is too small to justify \"safe for all patients\" or \"high confidence.\"\n\n## The Takeaway\n\nValidating JSON confirms the *container* is well-formed; it says nothing about whether the *contents* are true, logical, or adequately justified. Ensuring sound conclusions requires separate checks: verifying evidence, testing logical inference, and possibly human or domain-specific review—none of which a JSON parser performs.",
+  "ttft_ms": 11032,
+  "ttft_stream_ms": 1485,
+  "time_to_request_ms": 256,
+  "type": "result",
+  "duration_ms": 11050,
+  "uuid": "77cff068-69c6-4ab2-9b3e-1200285fcc1e",
+  "queued_turn_count": 0
+}
