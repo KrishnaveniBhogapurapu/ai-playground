@@ -6,14 +6,35 @@ import { extname, resolve } from 'node:path';
 import { stdin as input, stdout as output } from 'node:process';
 import { createInterface } from 'node:readline/promises';
 
-import { incidentAnalysisSchema } from './contracts/incident-analysis.js';
+import {
+  readReasoningConfig,
+  type ReasoningConfig,
+} from './config/reasoning.js';
+import {
+  incidentAnalysisSchema,
+  multimodalIncidentAnalysisSchema,
+} from './contracts/incident-analysis.js';
 import { classifySdkFailure } from './errors/classify-sdk-failure.js';
 import {
   formatFailure,
   SentinelFailure,
   type FailureCode,
 } from './errors/sentinel-failure.js';
-import { validateIncidentAnalysisValue } from './validation/parse-incident-analysis.js';
+import {
+  createIncidentAnalysisPrompt,
+  createMultimodalIncidentAnalysisPrompt,
+  incidentAnalysisInstructions,
+  multimodalEvidenceInstructions,
+} from './prompts/incident-analysis.js';
+import {
+  createIncidentMetricTool,
+  incidentMetricToolInstructions,
+  incidentMetricToolName,
+} from './tools/incident-metrics.js';
+import {
+  validateIncidentAnalysisValue,
+  validateMultimodalIncidentAnalysisValue,
+} from './validation/parse-incident-analysis.js';
 
 type ImageMediaType =
   | 'image/jpeg'
@@ -22,12 +43,7 @@ type ImageMediaType =
   | 'image/webp';
 
 type ResponseMode = 'complete' | 'stream';
-
-const incidentAnalysisInstructions = `Analyze the supplied incident evidence. Separate observed facts from assumptions and hypotheses. For every hypothesis, identify supporting and contradicting evidence. Identify missing information, recommend reversible next actions, and communicate uncertainty. Do not present any root cause as confirmed unless the supplied evidence confirms it.`;
-
-function createIncidentAnalysisPrompt(incidentEvidence: string): string {
-  return `${incidentAnalysisInstructions}\n\n<incident_evidence>\n${incidentEvidence}\n</incident_evidence>`;
-}
+type AnalysisContract = 'text' | 'multimodal';
 
 const imageMediaTypes: Readonly<Record<string, ImageMediaType>> = {
   '.gif': 'image/gif',
@@ -93,13 +109,15 @@ async function* createImagePrompt(
 
 async function runTurn(
   prompt: string | AsyncIterable<SDKUserMessage>,
-  sessionId?: string,
+  reasoningConfig: ReasoningConfig,
   responseMode: ResponseMode = 'complete',
+  analysisContract: AnalysisContract = 'text',
   abortController: AbortController = new AbortController(),
-): Promise<string> {
-  let nextSessionId = sessionId;
+): Promise<void> {
   let receivedResult = false;
   let wroteStreamedOutput = false;
+  let estimatedThinkingTokens = 0;
+  const incidentMetricTool = createIncidentMetricTool();
   const interruptionMessage =
     responseMode === 'stream'
       ? 'Stream interrupted. The partial response was rejected.'
@@ -114,17 +132,45 @@ async function runTurn(
       prompt,
       options: {
         abortController,
-        includePartialMessages: responseMode === 'stream',
-        maxTurns: 1,
+        includePartialMessages:
+          responseMode === 'stream' || reasoningConfig.mode === 'thinking',
+        maxTurns: 3,
         model: process.env.CLAUDE_MODEL?.trim() || 'sonnet',
         outputFormat: {
           type: 'json_schema',
-          schema: incidentAnalysisSchema,
+          schema:
+            analysisContract === 'multimodal'
+              ? multimodalIncidentAnalysisSchema
+              : incidentAnalysisSchema,
         },
+        systemPrompt: {
+          type: 'preset',
+          preset: 'claude_code',
+          append:
+            analysisContract === 'multimodal'
+              ? `${incidentAnalysisInstructions}\n${multimodalEvidenceInstructions}\n${incidentMetricToolInstructions}`
+              : `${incidentAnalysisInstructions}\n${incidentMetricToolInstructions}`,
+          excludeDynamicSections: true,
+        },
+        thinking: reasoningConfig.thinking,
+        ...(reasoningConfig.effort
+          ? { effort: reasoningConfig.effort }
+          : {}),
         tools: [],
-        ...(sessionId ? { resume: sessionId } : {}),
+        mcpServers: {
+          sentinel: incidentMetricTool.server,
+        },
+        allowedTools: [incidentMetricToolName],
       },
     })) {
+      if (
+        message.type === 'system' &&
+        message.subtype === 'thinking_tokens'
+      ) {
+        estimatedThinkingTokens = message.estimated_tokens;
+        continue;
+      }
+
       if (
         responseMode === 'stream' &&
         message.type === 'stream_event' &&
@@ -151,6 +197,40 @@ async function runTurn(
         continue;
       }
 
+      if (message.type === 'assistant') {
+        for (const block of message.message.content) {
+          if (
+            block.type === 'tool_use' &&
+            block.name === incidentMetricToolName
+          ) {
+            incidentMetricTool.trace.request = {
+              id: block.id,
+              name: block.name,
+              input: block.input,
+            };
+          }
+        }
+
+        continue;
+      }
+
+      if (message.type === 'user' && Array.isArray(message.message.content)) {
+        for (const block of message.message.content) {
+          if (
+            block.type === 'tool_result' &&
+            block.tool_use_id === incidentMetricTool.trace.request?.id
+          ) {
+            incidentMetricTool.trace.result = {
+              tool_use_id: block.tool_use_id,
+              content: block.content,
+              is_error: block.is_error ?? false,
+            };
+          }
+        }
+
+        continue;
+      }
+
       if (message.type !== 'result') {
         continue;
       }
@@ -170,7 +250,12 @@ async function runTurn(
       let analysis;
 
       try {
-        analysis = validateIncidentAnalysisValue(message.structured_output);
+        analysis =
+          analysisContract === 'multimodal'
+            ? validateMultimodalIncidentAnalysisValue(
+                message.structured_output,
+              )
+            : validateIncidentAnalysisValue(message.structured_output);
       } catch (error: unknown) {
         if (wroteStreamedOutput) {
           output.write('\n\n');
@@ -183,7 +268,24 @@ async function runTurn(
       }
 
       receivedResult = true;
-      nextSessionId = message.session_id;
+
+      if (incidentMetricTool.trace.request) {
+        console.log(
+          `Tool-use lifecycle:\n${JSON.stringify(
+            {
+              '1_claude_requests_tool': incidentMetricTool.trace.request,
+              '2_application_validates_input':
+                incidentMetricTool.trace.validation ?? null,
+              '3_application_executes_handler':
+                incidentMetricTool.trace.execution ?? null,
+              '4_application_returns_tool_result':
+                incidentMetricTool.trace.result ?? null,
+            },
+            null,
+            2,
+          )}\n`,
+        );
+      }
 
       if (wroteStreamedOutput) {
         output.write('\n\n');
@@ -194,6 +296,29 @@ async function runTurn(
       }
 
       console.log('Validation: accepted incident analysis.\n');
+      console.log('Run metadata:');
+      console.log(
+        JSON.stringify(
+          {
+            reasoning_mode: reasoningConfig.mode,
+            requested_model: process.env.CLAUDE_MODEL?.trim() || 'sonnet',
+            models_used: message.modelUsage,
+            input_tokens: message.usage.input_tokens,
+            cache_creation_input_tokens:
+              message.usage.cache_creation_input_tokens,
+            cache_read_input_tokens: message.usage.cache_read_input_tokens,
+            output_tokens: message.usage.output_tokens,
+            estimated_thinking_tokens: estimatedThinkingTokens,
+            duration_ms: message.duration_ms,
+            duration_api_ms: message.duration_api_ms,
+            total_cost_usd: message.total_cost_usd,
+            stop_reason: message.stop_reason,
+          },
+          null,
+          2,
+        ),
+      );
+      console.log();
       // console.log('Request metadata:');
       // console.log(
       // JSON.stringify(
@@ -217,17 +342,17 @@ async function runTurn(
     throw new SentinelFailure(interruptionCode, interruptionMessage);
   }
 
-  if (!receivedResult || !nextSessionId) {
+  if (!receivedResult) {
     throw new SentinelFailure(
       'runtime-error',
       'Claude did not return a completed response.',
     );
   }
 
-  return nextSessionId;
 }
 
 async function main(): Promise<void> {
+  const reasoningConfig = readReasoningConfig(process.argv.slice(2));
   const oauthToken = process.env.CLAUDE_CODE_OAUTH_TOKEN?.trim();
 
   if (!oauthToken) {
@@ -238,7 +363,6 @@ async function main(): Promise<void> {
   }
 
   const terminal = createInterface({ input, output });
-  let sessionId: string | undefined;
   let responseMode: ResponseMode = 'complete';
   let activeAbortController: AbortController | undefined;
   let exitRequested = false;
@@ -257,15 +381,17 @@ async function main(): Promise<void> {
 
   const runActiveTurn = async (
     prompt: string | AsyncIterable<SDKUserMessage>,
+    analysisContract: AnalysisContract = 'text',
   ): Promise<void> => {
     const abortController = new AbortController();
     activeAbortController = abortController;
 
     try {
-      sessionId = await runTurn(
+      await runTurn(
         prompt,
-        sessionId,
+        reasoningConfig,
         responseMode,
+        analysisContract,
         abortController,
       );
     } finally {
@@ -276,9 +402,14 @@ async function main(): Promise<void> {
   };
 
   console.log('Sentinel CLI');
+  console.log(`Reasoning mode: ${reasoningConfig.mode}`);
   console.log('Enter a message, /image to send an image, or /exit to quit.');
   console.log('Use /mode complete or /mode stream to change response display.');
   console.log('Every incident analysis is parsed and schema-validated.');
+  console.log('Prompt caching is automatic for the stable system contract.');
+  console.log(
+    'The read-only incident metric tool is available automatically when needed.',
+  );
   console.log(
     'Complete mode waits for the Agent SDK final result; it is not a raw non-streaming Messages API request.\n',
   );
@@ -313,7 +444,9 @@ async function main(): Promise<void> {
       try {
         if (userInput.toLowerCase() === '/image') {
           const imagePath = (await terminal.question('Image path: ')).trim();
-          const question = (await terminal.question('Question: ')).trim();
+          const incidentText = (
+            await terminal.question('Incident text: ')
+          ).trim();
 
           if (!imagePath) {
             throw new SentinelFailure(
@@ -322,13 +455,19 @@ async function main(): Promise<void> {
             );
           }
 
+          if (!incidentText) {
+            throw new SentinelFailure(
+              'invalid-input',
+              'Incident text is required with the dashboard image.',
+            );
+          }
+
           await runActiveTurn(
             createImagePrompt(
               imagePath,
-              createIncidentAnalysisPrompt(
-                question || 'Analyze the incident evidence visible in this image.',
-              ),
+              createMultimodalIncidentAnalysisPrompt(incidentText),
             ),
+            'multimodal',
           );
           continue;
         }

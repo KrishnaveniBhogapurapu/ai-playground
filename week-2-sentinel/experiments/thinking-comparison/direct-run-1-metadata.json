@@ -1,0 +1,37 @@
+{
+  "reasoning_mode": "direct",
+  "requested_model": "sonnet",
+  "models_used": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 1027,
+      "outputTokens": 14,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.0010969999999999999,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 2,
+      "outputTokens": 2369,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 1294,
+      "webSearchRequests": 0,
+      "costUSD": 0.02887,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty"
+    }
+  },
+  "input_tokens": 2,
+  "output_tokens": 2369,
+  "estimated_thinking_tokens": 0,
+  "duration_ms": 26022,
+  "duration_api_ms": 27193,
+  "total_cost_usd": 0.029967,
+  "stop_reason": "tool_use"
+}

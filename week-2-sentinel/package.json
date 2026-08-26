@@ -4,9 +4,12 @@
   "description": "",
   "main": "dist/index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "npm run build && node --test dist/tests/sentinel.test.js",
     "build": "tsc -p tsconfig.json",
+    "prestart": "npm run build",
     "start": "node dist/index.js",
+    "start:direct": "npm run build && node dist/index.js --reasoning direct",
+    "start:thinking": "npm run build && node dist/index.js --reasoning thinking",
     "validate:json": "node dist/experiments/validate-prompt-json.js"
   },
   "keywords": [],
@@ -16,7 +19,8 @@
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.245",
     "ajv": "^8.20.0",
-    "dotenv": "^17.4.2"
+    "dotenv": "^17.4.2",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^26.3.0",

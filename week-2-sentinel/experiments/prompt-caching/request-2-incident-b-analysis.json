@@ -1,0 +1,67 @@
+{
+  "facts": [
+    "At 14:22 UTC, search latency increased from 180 ms to 2.4 seconds",
+    "No deployment occurred in the previous two hours (relative to the incident)",
+    "Cache hit rate fell from 91% to 38%",
+    "Database latency stayed normal",
+    "A cache-cluster node restarted at 14:18 UTC",
+    "The node restart (14:18 UTC) precedes the latency spike (14:22 UTC) by 4 minutes",
+    "Root cause is explicitly stated as not confirmed in the evidence"
+  ],
+  "assumptions": [
+    "The cache-cluster node restart at 14:18 UTC and the latency spike at 14:22 UTC are on the same system/service as the search path being measured",
+    "Cache hit rate drop and search latency increase are assumed to be related events rather than coincidental, based on temporal proximity and domain knowledge that cache misses typically increase downstream latency",
+    "It is assumed no other infrastructure changes (config pushes, scaling events, network changes) occurred, since only 'deployment' was ruled out — absence of deployment does not rule out other change types",
+    "It is assumed the 'no deployment in previous two hours' claim is accurate and covers all relevant services, not just the primary application"
+  ],
+  "hypotheses": [
+    {
+      "claim": "The cache-cluster node restart caused a partial or full cache invalidation, dropping the hit rate, which in turn caused increased load/latency on the search path (possibly by forcing more expensive fallback lookups)",
+      "supporting_evidence": [
+        "Node restart at 14:18 UTC precedes cache hit rate drop and latency spike, consistent with a plausible causal ordering",
+        "Cache hit rate fell sharply (91% to 38%) around the same window as the restart",
+        "Database latency stayed normal, suggesting the bottleneck is not the DB itself but something in the cache/lookup path, consistent with cache misses being absorbed elsewhere or by the search service itself"
+      ],
+      "contradicting_evidence": [
+        "Database latency stayed normal — if cache misses were falling through to the database, elevated DB latency or load would typically be expected; its absence is not explained",
+        "No evidence provided confirms the restarted node was responsible for the portion of cache serving search traffic, or that a single node restart in a cluster would cause a 53-point hit-rate drop (depends on cluster topology/redundancy, which is not in evidence)",
+        "No causal mechanism (e.g., cache warm-up time, resharding, client-side hashing disruption) is confirmed by the evidence — this is inferred from general cache-cluster domain knowledge, not incident data"
+      ]
+    },
+    {
+      "claim": "The cache hit-rate drop and latency spike were caused by something independent of the node restart (e.g., a traffic pattern change, a query-key change, or an upstream client issue), and the node restart is coincidental",
+      "supporting_evidence": [
+        "Database latency staying normal is unexplained under the leading hypothesis and could fit a scenario where the issue is elsewhere (e.g., client-side cache key changes) rather than pure cache-cluster capacity loss",
+        "No deployment occurred, but the evidence does not rule out configuration changes, traffic surges, or upstream dependency issues"
+      ],
+      "contradicting_evidence": [
+        "Tight temporal correlation (4-minute gap) between the node restart and the observed symptoms makes coincidence less likely, though correlation is not causation",
+        "No alternative trigger event is present in the supplied evidence"
+      ]
+    }
+  ],
+  "missing_information": [
+    "Cache cluster topology and redundancy model (e.g., is this a single-node cache, sharded cluster, or replicated cluster where one node's restart could plausibly cause a 53-point hit-rate drop?)",
+    "Reason for the 14:18 UTC node restart (OOM kill, crash, manual restart, orchestrator-triggered, health-check failure, etc.)",
+    "Whether the restarted node held a disproportionate share of keys (e.g., hot shard) or was one of many equally-weighted nodes",
+    "Search service behavior on cache miss — does it fall through to the database, to another service, or perform a more expensive computation? This would explain why DB latency stayed normal despite the hit-rate drop",
+    "Application/search-service latency and error logs between 14:18 and 14:22 UTC",
+    "Whether other cache-cluster nodes showed any correlated changes (CPU, memory, connection counts, evictions) around 14:18 UTC",
+    "Any configuration or infrastructure changes in the prior two hours that are not classified as 'deployments' (e.g., config pushes, autoscaling events, network changes, DNS/service-discovery updates)",
+    "Current status: has latency recovered, and did cache hit rate recover after the restarted node rejoined the cluster?",
+    "Traffic volume/QPS trend for the search service around the incident window, to rule out a load spike as a contributing factor"
+  ],
+  "reversible_next_actions": [
+    "Pull cache-cluster node logs and orchestrator events (e.g., Kubernetes events, systemd logs) for the 14:15-14:22 UTC window to determine why the node restarted",
+    "Review cache-cluster topology/config to confirm whether a single node restart can plausibly account for a 91%-to-38% hit-rate drop, or whether that magnitude suggests a broader issue (e.g., multiple nodes, config change, cache flush)",
+    "Query search-service application logs for the incident window to identify what happens on cache miss (DB fallback, recomputation, upstream call) and correlate with the fact that DB latency stayed normal",
+    "Check monitoring/dashboards for cache-cluster metrics (evictions, memory usage, connection counts) across all nodes, not just the one that restarted, around 14:18 UTC",
+    "Check for non-deployment changes in the prior two hours: config management system history, feature-flag changes, autoscaling events, network/DNS changes",
+    "Confirm current incident status (resolved vs ongoing) and whether hit rate/latency have recovered, to bound the analysis window",
+    "Correlate traffic/QPS graphs for the search service against the incident timeline to rule out a concurrent load spike"
+  ],
+  "uncertainty": {
+    "level": "medium",
+    "reason": "There is a plausible and temporally consistent causal chain (node restart → cache hit-rate drop → latency spike), but the evidence does not confirm the causal mechanism, does not explain why database latency stayed normal despite the hit-rate collapse, and lacks cluster topology and log-level detail needed to distinguish 'restart caused the drop' from 'restart and drop share a common upstream cause.' The incident evidence itself states the root cause is not confirmed."
+  }
+}
