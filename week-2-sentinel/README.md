@@ -137,6 +137,8 @@ week-2-sentinel/
 
 ## Week 2 evidence
 
+- [`docs/agent-sdk-code-guide.md`](docs/agent-sdk-code-guide.md): every Agent SDK import, option, message, tool feature, and metadata field used by Sentinel, mapped to the Week 2 brief
+- [`docs/week-2-annotated-learning-guide.md`](docs/week-2-annotated-learning-guide.md): line-level map from every Week 2 learning point to code, evidence, status, rationale, and remaining gaps
 - `experiments/structured-output/`: prompt-requested and API-supported structured output
 - `experiments/failures/`: interrupted request rejection
 - `experiments/multimodal/`: dashboard image and evidence classification
