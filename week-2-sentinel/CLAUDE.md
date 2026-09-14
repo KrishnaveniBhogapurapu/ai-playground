@@ -13,6 +13,7 @@ Claude generates candidate output. The application remains responsible for input
 - `src/validation/`: JSON parsing and schema validation.
 - `src/errors/`: typed application failures and SDK error classification.
 - `src/prompts/`: stable incident-analysis instructions and request prompts.
+- `src/runtime/`: response acceptance boundaries shared by the CLI and tests.
 - `src/tools/`: application-controlled tools available during normal Sentinel requests.
 - `src/config/`: direct and thinking configuration.
 - `src/experiments/`: local experiment utilities.

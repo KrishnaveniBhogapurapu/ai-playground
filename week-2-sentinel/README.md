@@ -126,6 +126,7 @@ week-2-sentinel/
 │   ├── errors/              Typed failure classification
 │   ├── experiments/         Local validation utilities
 │   ├── prompts/             Stable Sentinel instructions
+│   ├── runtime/             Final-result and interruption acceptance boundary
 │   ├── tests/               Node test suite
 │   ├── tools/               Application-controlled Claude tools
 │   ├── validation/          JSON parsing and Ajv validation
@@ -140,7 +141,7 @@ week-2-sentinel/
 - [`docs/agent-sdk-code-guide.md`](docs/agent-sdk-code-guide.md): every Agent SDK import, option, message, tool feature, and metadata field used by Sentinel, mapped to the Week 2 brief
 - [`docs/week-2-annotated-learning-guide.md`](docs/week-2-annotated-learning-guide.md): line-level map from every Week 2 learning point to code, evidence, status, rationale, and remaining gaps
 - `experiments/structured-output/`: prompt-requested and API-supported structured output
-- `experiments/failures/`: interrupted request rejection
+- `experiments/failures/`: complete-mode interruption record and deterministic partial-stream rejection evidence
 - `experiments/multimodal/`: dashboard image and evidence classification
 - `experiments/thinking-comparison/`: direct-versus-thinking comparison
 - `experiments/prompt-caching/`: automatic stable-prefix cache experiment

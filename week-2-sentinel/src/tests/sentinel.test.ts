@@ -14,6 +14,7 @@ import {
   parseIncidentMetricInput,
   readIncidentMetric,
 } from '../tools/incident-metrics.js';
+import { TurnAcceptanceGuard } from '../runtime/turn-acceptance.js';
 import {
   parseIncidentAnalysis,
   validateIncidentAnalysisValue,
@@ -126,6 +127,45 @@ test('formats a typed failure as the application rejection contract', () => {
       message: 'Stopped.',
     },
   });
+});
+
+test('rejects streamed partial output when the turn is interrupted', () => {
+  const abortController = new AbortController();
+  const acceptanceGuard = new TurnAcceptanceGuard('stream');
+
+  acceptanceGuard.recordPartialOutput('{"facts":["partial');
+  abortController.abort();
+
+  assert.equal(acceptanceGuard.hasPartialOutput, true);
+  assert.throws(
+    () =>
+      acceptanceGuard.acceptValidatedResult(
+        validAnalysis,
+        abortController.signal,
+      ),
+    (error: unknown) =>
+      error instanceof SentinelFailure &&
+      error.category === 'runtime' &&
+      error.code === 'interrupted-stream' &&
+      error.message === 'Stream interrupted. The partial response was rejected.',
+  );
+  assert.equal(acceptanceGuard.hasAcceptedResult, false);
+});
+
+test('accepts a validated final result when the turn was not interrupted', () => {
+  const abortController = new AbortController();
+  const acceptanceGuard = new TurnAcceptanceGuard('stream');
+
+  acceptanceGuard.recordPartialOutput('{"facts":');
+  assert.equal(
+    acceptanceGuard.acceptValidatedResult(
+      validAnalysis,
+      abortController.signal,
+    ),
+    validAnalysis,
+  );
+  acceptanceGuard.assertCompleted(abortController.signal);
+  assert.equal(acceptanceGuard.hasAcceptedResult, true);
 });
 
 test('accepts only the supported incident metric tool input', () => {

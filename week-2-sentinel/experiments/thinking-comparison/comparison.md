@@ -33,3 +33,16 @@ Neither response showed a decisive evidence-quality advantage. Both treated gene
 ## Conclusion
 
 In this single paired run, I observed that adaptive thinking increased latency, output tokens, and estimated cost without producing a material improvement in the accepted incident analysis. I found direct mode more efficient and comparably useful for this case. I treat this as one observation rather than a general benchmark; repeated runs and harder cases would be required for a broader conclusion.
+
+## How I interpret the estimated cost
+
+The Agent SDK reports a per-model `costUSD` estimate and a cumulative `total_cost_usd`. For the direct run, I verified the total by adding the recorded model estimates:
+
+```text
+Haiku helper estimate  $0.001097
+Sonnet estimate       +$0.028870
+                      ----------
+Query estimate         $0.029967
+```
+
+The sum matches `total_cost_usd: 0.029967` in [`direct-run-1-metadata.json`](direct-run-1-metadata.json). This demonstrates a basic request-cost estimate without reconstructing historical token prices. The SDK calculates these values from its bundled pricing information, so I treat them as development estimates rather than authoritative billing data, consistent with the [Agent SDK cost-tracking documentation](https://code.claude.com/docs/en/agent-sdk/cost-tracking).

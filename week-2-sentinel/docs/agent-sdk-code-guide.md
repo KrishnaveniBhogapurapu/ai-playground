@@ -25,16 +25,17 @@ Sentinel uses the **Claude Agent SDK**, not the lower-level Anthropic **Client S
 This distinction matters for the Week 2 brief. Sentinel successfully calls Claude through an official TypeScript SDK, but it does not directly construct a `client.messages.create()` request. Therefore:
 
 - **Official SDK call:** covered through the Agent SDK.
-- **Messages API concepts:** visible indirectly in content blocks, stream events, stop reasons, and usage.
-- **Direct Messages API request structure:** not demonstrated.
-- **Direct `stream: false` and `stream: true`:** not demonstrated.
-- **Direct request-side `max_tokens`:** not demonstrated.
+- **Messages API concepts:** covered through content blocks, raw stream events, stop reasons, and usage exposed by the Agent SDK.
+- **Complete and streamed modes:** covered through the accepted Agent SDK behavior.
+- **Direct request-side `max_tokens`:** unavailable in the installed Agent SDK `query()` options and documented as a limitation.
+
+The accepted Week 2 design does not require a duplicate Client SDK implementation.
 
 Official reference: [Agent SDK overview](https://code.claude.com/docs/en/agent-sdk/overview).
 
 ## 2. Sentinel's Agent SDK lifecycle
 
-The main call begins at [`src/index.ts`](../src/index.ts#L131):
+The main call begins at [`src/index.ts`](../src/index.ts#L127):
 
 ```text
 CLI text or image
@@ -88,7 +89,7 @@ import { query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 
 | Import | Kind | Meaning | Sentinel usage | Week 2 mapping |
 | --- | --- | --- | --- | --- |
-| `query` | Runtime function | Starts the Agent SDK loop and returns an async iterable of SDK messages. | Called in [`runTurn()`](../src/index.ts#L131). | Official SDK, asynchronous request, response lifecycle, streaming, failures, metadata. |
+| `query` | Runtime function | Starts the Agent SDK loop and returns an async iterable of SDK messages. | Called in [`runTurn()`](../src/index.ts#L127). | Official SDK, asynchronous request, response lifecycle, streaming, failures, metadata. |
 | `SDKUserMessage` | TypeScript type | Describes a user-role message that can contain text, image, document, or tool-result blocks. The type is erased after compilation. | Used by [`createImagePrompt()`](../src/index.ts#L69) and the `prompt` parameter of [`runTurn()`](../src/index.ts#L110). | Text/image content blocks and multimodal input. |
 
 ### Imports in `src/config/reasoning.ts`
@@ -189,7 +190,7 @@ Field meanings:
 
 ## 5. Every `query()` option used by Sentinel
 
-The complete option object is at [`src/index.ts`](../src/index.ts#L133).
+The complete option object is at [`src/index.ts`](../src/index.ts#L129).
 
 ### `abortController`
 
@@ -199,7 +200,7 @@ abortController,
 
 `AbortController` is provided by the JavaScript runtime, not exported by the Agent SDK. Passing it to `query()` gives the application a cancellation handle for the active SDK request.
 
-Sentinel creates one controller per turn at [`src/index.ts`](../src/index.ts#L386). The first Ctrl+C calls `abort()` at [`src/index.ts`](../src/index.ts#L370). The application then rejects the turn instead of accepting any partial text.
+Sentinel creates one controller per turn at [`src/index.ts`](../src/index.ts#L378). The first Ctrl+C calls `abort()` at [`src/index.ts`](../src/index.ts#L362). The actual acceptance boundary is implemented by [`TurnAcceptanceGuard`](../src/runtime/turn-acceptance.ts#L20).
 
 **Why used:** cancellation must change the application result, not merely stop terminal rendering.
 
@@ -219,9 +220,9 @@ Sentinel enables it when:
 - `/mode stream` is active, so text or JSON deltas can be displayed;
 - thinking mode is active, so live thinking-token estimate messages are available.
 
-**Important boundary:** this enables partial events in the Agent SDK. Sentinel is not directly passing `stream: true` to `client.messages.create()`.
+**Important boundary:** this enables real partial events through the accepted Agent SDK abstraction.
 
-**Week 2 mapping:** streamed response is covered at the Agent SDK layer; direct Messages API streaming remains uncovered.
+**Week 2 mapping:** the streamed-response requirement is covered.
 
 Official reference: [stream Agent SDK responses](https://code.claude.com/docs/en/agent-sdk/streaming-output).
 
@@ -379,7 +380,7 @@ The Agent SDK yields a discriminated union. Sentinel checks `message.type` to de
 
 ### `system` + `thinking_tokens`
 
-Handled at [`src/index.ts`](../src/index.ts#L166):
+Handled at [`src/index.ts`](../src/index.ts#L163):
 
 ```ts
 if (
@@ -396,7 +397,7 @@ This is a live estimate for the current thinking block. It is useful for observa
 
 ### `stream_event`
 
-Handled at [`src/index.ts`](../src/index.ts#L174). Sentinel accepts only `content_block_delta` events for terminal display:
+Handled at [`src/index.ts`](../src/index.ts#L170). Sentinel accepts only `content_block_delta` events for terminal display:
 
 - `text_delta` contributes visible text;
 - `input_json_delta` contributes partial structured JSON.
@@ -407,7 +408,7 @@ These chunks are display data only. Sentinel does not validate or accept them as
 
 ### `assistant`
 
-Handled at [`src/index.ts`](../src/index.ts#L200). An assistant message contains completed content blocks from a model turn. Sentinel looks for a block where:
+Handled at [`src/index.ts`](../src/index.ts#L198). An assistant message contains completed content blocks from a model turn. Sentinel looks for a block where:
 
 ```ts
 block.type === 'tool_use'
@@ -425,7 +426,7 @@ Sentinel records this as the request stage of the tool trace. Recording a `tool_
 
 ### `user` containing `tool_result`
 
-Handled at [`src/index.ts`](../src/index.ts#L217). The Agent SDK emits a user-role message containing the tool result sent back to Claude.
+Handled at [`src/index.ts`](../src/index.ts#L215). The Agent SDK emits a user-role message containing the tool result sent back to Claude.
 
 Sentinel matches `block.tool_use_id` with the original request ID. This proves which result belongs to which tool request.
 
@@ -433,7 +434,7 @@ Sentinel matches `block.tool_use_id` with the original request ID. This proves w
 
 ### `result`
 
-Handled from [`src/index.ts`](../src/index.ts#L234). A result message marks the completed turn outcome and contains final output and metadata.
+Handled from [`src/index.ts`](../src/index.ts#L232). A result message marks the completed turn outcome and contains final output and metadata.
 
 Sentinel applies these gates in order:
 
@@ -441,9 +442,9 @@ Sentinel applies these gates in order:
 2. If `subtype !== 'success'`, classify the SDK failure.
 3. If `is_error` is true, classify the SDK/API failure.
 4. Validate `structured_output` against the application schema.
-5. Mark `receivedResult = true` only after validation succeeds.
+5. Ask `TurnAcceptanceGuard` to accept the validated value only while the abort signal is clear.
 
-This ordering is the core incomplete-response safety boundary. A displayed partial stream, assistant message, or tool result is not enough to set `receivedResult`.
+This ordering is the core incomplete-response safety boundary. A displayed partial stream, assistant message, or tool result cannot set `hasAcceptedResult`. The deterministic partial-then-abort test is documented in [`interrupted-stream-acceptance-test.md`](../experiments/failures/interrupted-stream-acceptance-test.md).
 
 **Week 2 mapping:** accepted analysis versus explicit typed failure, malformed/incomplete rejection, and common failure categories.
 
@@ -605,7 +606,7 @@ The SDK signal identifies how the agent loop ended. Sentinel's mapping identifie
 
 ## 11. Usage, cost, latency, cache, and stop metadata
 
-Sentinel reads the final result at [`src/index.ts`](../src/index.ts#L299).
+Sentinel reads the final result at [`src/index.ts`](../src/index.ts#L297).
 
 | SDK result field | Meaning | Sentinel output | Week 2 mapping |
 | --- | --- | --- | --- |
@@ -619,6 +620,7 @@ Sentinel reads the final result at [`src/index.ts`](../src/index.ts#L299).
 | `total_cost_usd` | SDK-estimated cumulative cost for the query. | `total_cost_usd` | Basic cost estimate; not a billing statement. |
 | `stop_reason` | Model/API stop reason for the completed result. | `stop_reason` | Explain why generation ended. |
 | `estimated_tokens` on `thinking_tokens` | Approximate live thinking progress. | `estimated_thinking_tokens` | Thinking-token observation. |
+| Application prompt constants | Stable version identifiers defined by Sentinel, not SDK usage fields. | `prompt_version`, `prompt_contract` | Prompt metadata without exposing the full prompt. |
 
 Two important interpretation rules:
 
@@ -673,43 +675,42 @@ The central learning is that using an Agent SDK does not remove application resp
 
 | Week 2 point | Agent SDK feature used | Sentinel code | Coverage |
 | --- | --- | --- | --- |
-| Official Python or TypeScript SDK | `query()` from the TypeScript Agent SDK | [`src/index.ts`](../src/index.ts#L131) | **Covered through Agent SDK** |
-| Messages API request/response structure | SDK user/assistant/result messages and raw stream events | [`src/index.ts`](../src/index.ts#L166) | **Partial:** indirect only; no `client.messages.create()` |
+| Official Python or TypeScript SDK | `query()` from the TypeScript Agent SDK | [`src/index.ts`](../src/index.ts#L127) | **Covered through the accepted Agent SDK** |
+| Messages API request/response structure | SDK user/assistant/result messages and raw stream events | [`src/index.ts`](../src/index.ts#L163) | **Covered through the accepted abstraction** |
 | System instructions and user messages | `systemPrompt` plus string/`SDKUserMessage` prompt | [`src/index.ts`](../src/index.ts#L111) | **Covered** |
 | Text, image, and other content blocks | `SDKUserMessage.message.content` | [`src/index.ts`](../src/index.ts#L87) | **Covered for text, image, tool use, and tool result** |
-| Model identifiers | `model` and `modelUsage` | [`src/index.ts`](../src/index.ts#L138) | **Covered** |
-| `max_tokens` | No matching option used | — | **Not covered by current Agent SDK path** |
-| Stop reasons | `result.stop_reason` and `terminal_reason` | [`src/index.ts`](../src/index.ts#L315), [`classify-sdk-failure.ts`](../src/errors/classify-sdk-failure.ts#L16) | **Covered** |
-| Usage information | `usage`, `modelUsage`, `total_cost_usd` | [`src/index.ts`](../src/index.ts#L299) | **Covered after each request** |
-| Synchronous/asynchronous requests | Async iterable returned by `query()` | [`src/index.ts`](../src/index.ts#L131) | **Covered for asynchronous TypeScript flow** |
-| Environment configuration | SDK inherits environment; Sentinel checks OAuth token and model env var | [`src/index.ts`](../src/index.ts#L354) | **Covered for this local Agent SDK setup** |
-| Complete response | Wait for `result` without rendering deltas | [`src/index.ts`](../src/index.ts#L234) | **Covered at Agent SDK layer** |
-| Streamed response | `includePartialMessages` and `stream_event` | [`src/index.ts`](../src/index.ts#L135) | **Covered at Agent SDK layer; not raw API `stream: true`** |
-| Interrupted stream rejection | `abortController` plus final-result gate | [`src/index.ts`](../src/index.ts#L238) | **Covered in code** |
-| API-supported structured output | `outputFormat` and `structured_output` | [`src/index.ts`](../src/index.ts#L139) | **Covered** |
+| Model identifiers | `model` and `modelUsage` | [`src/index.ts`](../src/index.ts#L134) | **Covered** |
+| `max_tokens` | No matching `query()` option; `maxTurns` and `taskBudget` are different controls | — | **Concept covered; exact control unavailable in accepted SDK** |
+| Stop reasons | `result.stop_reason` and `terminal_reason` | [`src/index.ts`](../src/index.ts#L318), [`classify-sdk-failure.ts`](../src/errors/classify-sdk-failure.ts#L16) | **Covered** |
+| Usage information | `usage`, `modelUsage`, `total_cost_usd` | [`src/index.ts`](../src/index.ts#L297) | **Covered after each request** |
+| Synchronous/asynchronous requests | Async iterable returned by `query()` | [`src/index.ts`](../src/index.ts#L127) | **Covered for asynchronous TypeScript flow** |
+| Environment configuration | SDK inherits environment; Sentinel checks OAuth token and model env var | [`src/index.ts`](../src/index.ts#L346) | **Covered for this local Agent SDK setup** |
+| Complete response | Wait for `result` without rendering deltas | [`src/index.ts`](../src/index.ts#L232) | **Covered through the accepted Agent SDK** |
+| Streamed response | `includePartialMessages` and `stream_event` | [`src/index.ts`](../src/index.ts#L131) | **Covered through the accepted Agent SDK** |
+| Interrupted stream rejection | `abortController` plus the real acceptance guard | [`turn-acceptance.ts`](../src/runtime/turn-acceptance.ts#L20), [`sentinel.test.ts`](../src/tests/sentinel.test.ts#L132) | **Covered and deterministically tested** |
+| API-supported structured output | `outputFormat` and `structured_output` | [`src/index.ts`](../src/index.ts#L135) | **Covered** |
 | Schema validation | SDK output format plus Ajv | [`src/validation/parse-incident-analysis.ts`](../src/validation/parse-incident-analysis.ts#L43) | **Covered** |
 | Multimodal input | Async `SDKUserMessage` with text/image blocks | [`src/index.ts`](../src/index.ts#L69) | **Covered** |
 | Direct versus thinking | `ThinkingConfig` and `EffortLevel` | [`src/config/reasoning.ts`](../src/config/reasoning.ts#L16) | **Covered for disabled versus adaptive/high** |
-| Tokens, latency, cost | Result usage and duration/cost fields | [`src/index.ts`](../src/index.ts#L299) | **Covered** |
-| Token-counting capability | No preflight count call | — | **Not covered** |
-| Prompt caching | Stable system prompt plus cache usage fields | [`src/index.ts`](../src/index.ts#L146) | **Covered** |
+| Tokens, latency, cost | Result usage and duration/cost fields | [`src/index.ts`](../src/index.ts#L297) | **Covered** |
+| Token-counting capability | No method exposed by Agent SDK `query()` | — | **Unavailable through the accepted SDK; limitation recorded** |
+| Prompt caching | Stable system prompt plus cache usage fields | [`src/index.ts`](../src/index.ts#L142) | **Covered** |
 | Claude Code foundation | Claude Code preset and repository configuration | [`CLAUDE.md`](../CLAUDE.md), [`.claude/settings.json`](../.claude/settings.json) | **Covered; repository configuration is separate from `query()` code** |
 | Tool-use preview | `tool()`, `createSdkMcpServer()`, `mcpServers`, `allowedTools`, tool messages | [`src/tools/incident-metrics.ts`](../src/tools/incident-metrics.ts#L83) | **Covered; the SDK also completes the loop** |
 | Typed failures | SDK result types, statuses, and terminal reasons | [`src/errors/classify-sdk-failure.ts`](../src/errors/classify-sdk-failure.ts#L10) | **Covered in mapping and tests** |
 
-## 15. The three Agent SDK limitations to remember for this assignment
+## 15. Agent SDK boundaries to remember
 
-### 1. Agent SDK complete mode is not a direct non-streaming Messages API call
+### 1. The Agent SDK owns the lower-level Messages request
 
-Complete mode simply ignores partial SDK events and waits for the final `result`. It does not prove that a raw request was sent with `stream: false`.
+Complete mode waits for the final result without displaying partial events. Stream mode requests and displays partial SDK messages. Both are accepted Week 2 behaviors for Sentinel.
 
-### 2. Agent SDK partial messages are not the same exercise as writing raw `stream: true`
+### 2. Agent SDK partial messages still require an application acceptance boundary
 
-The partial events are real streaming events, but the Agent SDK owns the underlying request and agent loop. A direct Messages API streaming exercise would use the Client SDK and handle its stream object explicitly.
+Partial events are display/progress data. Sentinel accepts only a validated final result while the turn is not aborted; the Agent SDK does not remove that application responsibility.
 
 ### 3. `maxOutputTokens` metadata is not request-side `max_tokens`
 
-The former describes model capability in `modelUsage`. The latter would be a request limit. Sentinel currently records the capability but does not set the direct API parameter.
+The former describes model capability in `modelUsage`. The latter is a request limit that the installed Agent SDK `query()` options do not expose. `maxTurns` and `taskBudget` are different controls and are not substituted for it.
 
-These limitations do not invalidate the Agent SDK work. They define exactly which Week 2 concepts the current code demonstrates and which lower-level API concepts still need a separate direct Client SDK example.
-
+The accepted Week 2 scope uses the Agent SDK without adding a duplicate Client SDK path. Unsupported lower-level controls are documented accurately rather than represented by unrelated fields.

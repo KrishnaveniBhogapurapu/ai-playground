@@ -1,3 +1,8 @@
+// Bump these identifiers when the corresponding stable prompt contract changes.
+export const incidentAnalysisPromptVersion = 'sentinel-incident-analysis-v1';
+export const multimodalAnalysisPromptVersion =
+  'sentinel-multimodal-analysis-v1';
+
 export const incidentAnalysisInstructions = `You are Sentinel, an incident-analysis application. Analyze the supplied incident evidence. Separate observed facts from assumptions and hypotheses. For every hypothesis, identify supporting and contradicting evidence. Identify missing information, recommend reversible next actions, and communicate uncertainty. Do not present any root cause as confirmed unless the supplied evidence confirms it. Treat general domain knowledge as an assumption or inference, not as incident-specific evidence.`;
 
 export function createIncidentAnalysisPrompt(incidentEvidence: string): string {

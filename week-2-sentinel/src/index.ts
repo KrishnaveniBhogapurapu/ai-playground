@@ -18,14 +18,19 @@ import { classifySdkFailure } from './errors/classify-sdk-failure.js';
 import {
   formatFailure,
   SentinelFailure,
-  type FailureCode,
 } from './errors/sentinel-failure.js';
 import {
   createIncidentAnalysisPrompt,
   createMultimodalIncidentAnalysisPrompt,
+  incidentAnalysisPromptVersion,
   incidentAnalysisInstructions,
+  multimodalAnalysisPromptVersion,
   multimodalEvidenceInstructions,
 } from './prompts/incident-analysis.js';
+import {
+  TurnAcceptanceGuard,
+  type TurnResponseMode,
+} from './runtime/turn-acceptance.js';
 import {
   createIncidentMetricTool,
   incidentMetricToolInstructions,
@@ -42,7 +47,6 @@ type ImageMediaType =
   | 'image/gif'
   | 'image/webp';
 
-type ResponseMode = 'complete' | 'stream';
 type AnalysisContract = 'text' | 'multimodal';
 
 const imageMediaTypes: Readonly<Record<string, ImageMediaType>> = {
@@ -110,22 +114,14 @@ async function* createImagePrompt(
 async function runTurn(
   prompt: string | AsyncIterable<SDKUserMessage>,
   reasoningConfig: ReasoningConfig,
-  responseMode: ResponseMode = 'complete',
+  responseMode: TurnResponseMode = 'complete',
   analysisContract: AnalysisContract = 'text',
   abortController: AbortController = new AbortController(),
 ): Promise<void> {
-  let receivedResult = false;
   let wroteStreamedOutput = false;
   let estimatedThinkingTokens = 0;
   const incidentMetricTool = createIncidentMetricTool();
-  const interruptionMessage =
-    responseMode === 'stream'
-      ? 'Stream interrupted. The partial response was rejected.'
-      : 'Request interrupted before a completed response was received.';
-  const interruptionCode: FailureCode =
-    responseMode === 'stream'
-      ? 'interrupted-stream'
-      : 'interrupted-request';
+  const acceptanceGuard = new TurnAcceptanceGuard(responseMode);
 
   try {
     for await (const message of query({
@@ -188,6 +184,8 @@ async function runTurn(
           continue;
         }
 
+        acceptanceGuard.recordPartialOutput(streamedChunk);
+
         if (!wroteStreamedOutput) {
           output.write('\nClaude: ');
           wroteStreamedOutput = true;
@@ -235,9 +233,7 @@ async function runTurn(
         continue;
       }
 
-      if (abortController.signal.aborted) {
-        throw new SentinelFailure(interruptionCode, interruptionMessage);
-      }
+      acceptanceGuard.assertNotInterrupted(abortController.signal);
 
       if (message.subtype !== 'success') {
         throw classifySdkFailure(message);
@@ -250,12 +246,16 @@ async function runTurn(
       let analysis;
 
       try {
-        analysis =
+        const validatedAnalysis =
           analysisContract === 'multimodal'
             ? validateMultimodalIncidentAnalysisValue(
                 message.structured_output,
               )
             : validateIncidentAnalysisValue(message.structured_output);
+        analysis = acceptanceGuard.acceptValidatedResult(
+          validatedAnalysis,
+          abortController.signal,
+        );
       } catch (error: unknown) {
         if (wroteStreamedOutput) {
           output.write('\n\n');
@@ -266,8 +266,6 @@ async function runTurn(
         );
         throw error;
       }
-
-      receivedResult = true;
 
       if (incidentMetricTool.trace.request) {
         console.log(
@@ -302,6 +300,11 @@ async function runTurn(
           {
             reasoning_mode: reasoningConfig.mode,
             requested_model: process.env.CLAUDE_MODEL?.trim() || 'sonnet',
+            prompt_version:
+              analysisContract === 'multimodal'
+                ? multimodalAnalysisPromptVersion
+                : incidentAnalysisPromptVersion,
+            prompt_contract: analysisContract,
             models_used: message.modelUsage,
             input_tokens: message.usage.input_tokens,
             cache_creation_input_tokens:
@@ -330,25 +333,13 @@ async function runTurn(
     }
   } catch (error: unknown) {
     if (abortController.signal.aborted) {
-      throw new SentinelFailure(interruptionCode, interruptionMessage, {
-        cause: error,
-      });
+      throw acceptanceGuard.createInterruptionFailure(error);
     }
 
     throw error;
   }
 
-  if (abortController.signal.aborted) {
-    throw new SentinelFailure(interruptionCode, interruptionMessage);
-  }
-
-  if (!receivedResult) {
-    throw new SentinelFailure(
-      'runtime-error',
-      'Claude did not return a completed response.',
-    );
-  }
-
+  acceptanceGuard.assertCompleted(abortController.signal);
 }
 
 async function main(): Promise<void> {
@@ -363,7 +354,7 @@ async function main(): Promise<void> {
   }
 
   const terminal = createInterface({ input, output });
-  let responseMode: ResponseMode = 'complete';
+  let responseMode: TurnResponseMode = 'complete';
   let activeAbortController: AbortController | undefined;
   let exitRequested = false;
 
