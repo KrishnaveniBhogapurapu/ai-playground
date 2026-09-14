@@ -14,6 +14,8 @@ Claude generates candidate output. The application remains responsible for input
 - `src/errors/`: typed application failures and SDK error classification.
 - `src/prompts/`: stable incident-analysis instructions and request prompts.
 - `src/runtime/`: response acceptance boundaries shared by the CLI and tests.
+- `src/runtime/investigation.ts`: shared authorization, tool budgets, deadlines, cancellation and audit boundary for both SDK and custom loops.
+- `src/config/investigation-policy.ts`: host-controlled fictional identity, grants and limits; never derive these from a model message.
 - `src/tools/`: application-controlled tools available during normal Sentinel requests.
 - `src/config/`: direct and thinking configuration.
 - `src/experiments/`: local experiment utilities.
@@ -29,6 +31,8 @@ Claude generates candidate output. The application remains responsible for input
 - Start in thinking mode: `npm run start:thinking`
 - Validate a recorded incident analysis: `npm run validate:json -- <path-to-json>`
 - Run the automated test suite: `npm test`
+- Record offline Week 3 safety scenarios: `npm run week3:verify`
+- Run and record Week 3 SDK investigations: `npm run week3:sdk` and `npm run week3:injection` (live model authorization still applies). The manual-loop comparison is covered by `npm run week3:verify` without model requests.
 
 Run `npm run build` after TypeScript changes and `npm test` before declaring a code change complete.
 

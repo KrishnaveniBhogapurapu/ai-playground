@@ -13,6 +13,8 @@ export type FailureCode =
   | 'rate-limit'
   | 'api-error'
   | 'timeout'
+  | 'tool-call-limit'
+  | 'model-turn-limit'
   | 'interrupted-request'
   | 'interrupted-stream'
   | 'runtime-error'
@@ -30,6 +32,8 @@ export const failureCategoryByCode: Readonly<
   'rate-limit': 'integration',
   'api-error': 'integration',
   timeout: 'runtime',
+  'tool-call-limit': 'runtime',
+  'model-turn-limit': 'runtime',
   'interrupted-request': 'runtime',
   'interrupted-stream': 'runtime',
   'runtime-error': 'runtime',

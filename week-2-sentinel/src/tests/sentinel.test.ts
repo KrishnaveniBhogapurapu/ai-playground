@@ -10,10 +10,8 @@ import {
   formatFailure,
   SentinelFailure,
 } from '../errors/sentinel-failure.js';
-import {
-  parseIncidentMetricInput,
-  readIncidentMetric,
-} from '../tools/incident-metrics.js';
+import { executeEvidenceTool, createEvidenceTools } from '../tools/evidence-tools.js';
+import { validateServiceMetricsOutput, validateDependencyHealthOutput } from '../tools/evidence-contracts.js';
 import { TurnAcceptanceGuard } from '../runtime/turn-acceptance.js';
 import {
   parseIncidentAnalysis,
@@ -39,14 +37,14 @@ const validAnalysis: IncidentAnalysis = {
   },
 };
 
-test('parses a valid incident-analysis JSON response', () => {
+test('parses a valid incident-analysis JSON response', async () => {
   assert.deepEqual(
     parseIncidentAnalysis(JSON.stringify(validAnalysis)),
     validAnalysis,
   );
 });
 
-test('classifies malformed JSON as a model-output failure', () => {
+test('classifies malformed JSON as a model-output failure', async () => {
   assert.throws(
     () => parseIncidentAnalysis('{"facts": ['),
     (error: unknown) =>
@@ -56,7 +54,7 @@ test('classifies malformed JSON as a model-output failure', () => {
   );
 });
 
-test('rejects JSON that does not satisfy the incident schema', () => {
+test('rejects JSON that does not satisfy the incident schema', async () => {
   const { uncertainty: _omitted, ...missingUncertainty } = validAnalysis;
 
   assert.throws(
@@ -68,7 +66,7 @@ test('rejects JSON that does not satisfy the incident schema', () => {
   );
 });
 
-test('rejects unexpected properties from structured output', () => {
+test('rejects unexpected properties from structured output', async () => {
   assert.throws(
     () =>
       validateIncidentAnalysisValue({
@@ -81,7 +79,7 @@ test('rejects unexpected properties from structured output', () => {
   );
 });
 
-test('validates the multimodal evidence-classification contract', () => {
+test('validates the multimodal evidence-classification contract', async () => {
   const multimodalAnalysis: MultimodalIncidentAnalysis = {
     ...validAnalysis,
     evidence_classification: {
@@ -108,13 +106,13 @@ test('maps common thrown SDK messages to typed failures', async (context) => {
   ] as const;
 
   for (const [message, expectedCode] of cases) {
-    await context.test(expectedCode, () => {
+    await context.test(expectedCode, async () => {
       assert.equal(classifyThrownFailure(new Error(message)).code, expectedCode);
     });
   }
 });
 
-test('formats a typed failure as the application rejection contract', () => {
+test('formats a typed failure as the application rejection contract', async () => {
   const formatted = JSON.parse(
     formatFailure(new SentinelFailure('interrupted-stream', 'Stopped.')),
   ) as unknown;
@@ -129,7 +127,7 @@ test('formats a typed failure as the application rejection contract', () => {
   });
 });
 
-test('rejects streamed partial output when the turn is interrupted', () => {
+test('rejects streamed partial output when the turn is interrupted', async () => {
   const abortController = new AbortController();
   const acceptanceGuard = new TurnAcceptanceGuard('stream');
 
@@ -152,7 +150,7 @@ test('rejects streamed partial output when the turn is interrupted', () => {
   assert.equal(acceptanceGuard.hasAcceptedResult, false);
 });
 
-test('accepts a validated final result when the turn was not interrupted', () => {
+test('accepts a validated final result when the turn was not interrupted', async () => {
   const abortController = new AbortController();
   const acceptanceGuard = new TurnAcceptanceGuard('stream');
 
@@ -168,40 +166,104 @@ test('accepts a validated final result when the turn was not interrupted', () =>
   assert.equal(acceptanceGuard.hasAcceptedResult, true);
 });
 
-test('accepts only the supported incident metric tool input', () => {
-  const input = parseIncidentMetricInput({
-    incident_id: 'INC-104',
-    metric: 'checkout_error_rate',
-  });
+const metricsInput = {
+  service: 'checkout-api' as const, metric: 'error_rate' as const,
+  start_time: '2026-08-21T10:00:00Z', end_time: '2026-08-21T10:10:00Z',
+};
+const healthInput = {
+  service: 'checkout-api' as const, dependency: 'database' as const,
+  requested_time: '2026-08-21T10:04:00Z',
+};
 
-  assert.deepEqual(input, {
-    incident_id: 'INC-104',
-    metric: 'checkout_error_rate',
-  });
-  assert.throws(() =>
-    parseIncidentMetricInput({
-      incident_id: 'INC-999',
-      metric: 'checkout_error_rate',
-    }),
-  );
-  assert.throws(() =>
-    parseIncidentMetricInput({
-      incident_id: 'INC-104',
-      metric: 'deployment_status',
-    }),
-  );
+test('retrieves fictional evidence from both tools and preserves provenance', async () => {
+  const metrics = await executeEvidenceTool('get_service_metrics', metricsInput);
+  assert.equal(metrics.ok, true);
+  if (!metrics.ok) return;
+  assert.deepEqual(metrics.data.observations, [
+    { time: '2026-08-21T10:00:00Z', value: 0.4 },
+    { time: '2026-08-21T10:04:00Z', value: 9 },
+  ]);
+  assert.equal(metrics.data.source, 'fictional Sentinel INC-104 fixture');
+  for (const dependency of ['database', 'payment-provider']) {
+    const health = await executeEvidenceTool('get_dependency_health', { ...healthInput, dependency });
+    assert.equal(health.ok, true);
+    if (health.ok) {
+      assert.equal(health.data.dependency, dependency);
+      assert.equal(health.data.status, 'degraded');
+    }
+  }
 });
 
-test('returns the fictional metric only after valid input is supplied', () => {
-  const input = parseIncidentMetricInput({
-    incident_id: 'INC-104',
-    metric: 'checkout_error_rate',
+test('filters metrics by inclusive range and explicitly reports truncation', async () => {
+  const limited = await executeEvidenceTool('get_service_metrics', { ...metricsInput, max_results: 1 });
+  assert.equal(limited.ok, true);
+  if (limited.ok) {
+    assert.equal(limited.data.truncated, true);
+    assert.equal((limited.data.observations as unknown[]).length, 1);
+  }
+  const exact = await executeEvidenceTool('get_service_metrics', {
+    ...metricsInput, start_time: healthInput.requested_time, end_time: healthInput.requested_time,
   });
+  assert.equal(exact.ok, true);
+  if (exact.ok) assert.deepEqual(exact.data.observations, [{ time: healthInput.requested_time, value: 9 }]);
+});
 
-  assert.deepEqual(readIncidentMetric(input), {
-    value: 9,
-    unit: 'percent',
-    observed_at: '10:04 UTC',
-    source: 'fictional Sentinel monitoring snapshot',
-  });
+test('rejects invalid names, extra fields, time ranges, services and result counts', async () => {
+  for (const change of [
+    { service: 'production-admin' }, { metric: 'passwords' }, { extra: true },
+    { start_time: '10:00' }, { start_time: '2026-02-30T10:00:00Z' },
+    { end_time: '2026-08-21T09:59:00Z' }, { end_time: '2026-08-21T11:01:00Z' },
+    { max_results: 0 }, { max_results: 101 }, { max_results: 1.5 },
+  ]) {
+    const result = await executeEvidenceTool('get_service_metrics', { ...metricsInput, ...change });
+    assert.equal(result.ok, false, JSON.stringify(change));
+    if (!result.ok) assert.equal(result.error.code, 'invalid-input');
+  }
+  for (const change of [{ dependency: 'secrets' }, { service: 'admin' }, { requested_time: 'now' }]) {
+    assert.equal((await executeEvidenceTool('get_dependency_health', { ...healthInput, ...change })).ok, false);
+  }
+  const unknown = await executeEvidenceTool('get_incident_metric', {});
+  assert.equal(unknown.ok, false);
+  if (!unknown.ok) assert.equal(unknown.error.code, 'unknown-tool');
+});
+
+test('missing snapshots produce explicit errors instead of invented evidence', async () => {
+  for (const [name, input] of [
+    ['get_service_metrics', { ...metricsInput, start_time: '2026-08-22T10:00:00Z', end_time: '2026-08-22T10:10:00Z' }],
+    ['get_dependency_health', { ...healthInput, requested_time: '2026-08-21T10:05:00Z' }],
+  ] as const) {
+    const result = await executeEvidenceTool(name, input);
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.error.code, 'evidence-unavailable');
+  }
+});
+
+test('rejects malformed, out-of-range and mismatched tool output', async () => {
+  const result = await executeEvidenceTool('get_service_metrics', metricsInput);
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  for (const change of [
+    { unit: 'seconds' }, { source: 'production' },
+    { observations: [{ time: healthInput.requested_time, value: 101 }] },
+    { observations: [{ time: '2026-08-21T10:11:00Z', value: 9 }] },
+    { observations: Array(101).fill({ time: healthInput.requested_time, value: 9 }) },
+    { end_time: '2026-08-21T10:09:00Z' },
+  ]) assert.throws(() => validateServiceMetricsOutput({ ...result.data, ...change }, metricsInput));
+  assert.throws(() => validateServiceMetricsOutput(result.data, { ...metricsInput, max_results: 1 }));
+  const health = await executeEvidenceTool('get_dependency_health', healthInput);
+  assert.equal(health.ok, true);
+  if (health.ok) {
+    assert.throws(() => validateDependencyHealthOutput({ ...health.data, detail: 'x'.repeat(1001) }, healthInput));
+    assert.throws(() => validateDependencyHealthOutput({ ...health.data, dependency: 'payment-provider' }, healthInput));
+  }
+});
+
+test('creates independent SDK tool servers and trace histories', async () => {
+  const first = createEvidenceTools();
+  const second = createEvidenceTools();
+  assert.ok(first.server);
+  first.trace.requests.push({ id: 'toolu_1', name: 'get_service_metrics', input: metricsInput });
+  assert.equal(second.trace.requests.length, 0);
+  first.close();
+  second.close();
 });

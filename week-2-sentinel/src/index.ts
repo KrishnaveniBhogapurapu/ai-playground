@@ -15,6 +15,9 @@ import {
   multimodalIncidentAnalysisSchema,
 } from './contracts/incident-analysis.js';
 import { classifySdkFailure } from './errors/classify-sdk-failure.js';
+import { Investigation } from './runtime/investigation.js';
+import { boundedMessages } from './runtime/bounded-stream.js';
+import { sdkPolicyOptions } from './runtime/sdk-investigation.js';
 import {
   formatFailure,
   SentinelFailure,
@@ -32,10 +35,10 @@ import {
   type TurnResponseMode,
 } from './runtime/turn-acceptance.js';
 import {
-  createIncidentMetricTool,
-  incidentMetricToolInstructions,
-  incidentMetricToolName,
-} from './tools/incident-metrics.js';
+  createEvidenceTools,
+  evidenceToolInstructions,
+  evidenceToolNames,
+} from './tools/evidence-tools.js';
 import {
   validateIncidentAnalysisValue,
   validateMultimodalIncidentAnalysisValue,
@@ -120,17 +123,17 @@ async function runTurn(
 ): Promise<void> {
   let wroteStreamedOutput = false;
   let estimatedThinkingTokens = 0;
-  const incidentMetricTool = createIncidentMetricTool();
+  const investigation = new Investigation({ controller: abortController });
+  const evidenceTools = createEvidenceTools(investigation);
   const acceptanceGuard = new TurnAcceptanceGuard(responseMode);
 
   try {
-    for await (const message of query({
+    for await (const message of boundedMessages(query({
       prompt,
       options: {
-        abortController,
+        ...sdkPolicyOptions(evidenceTools),
         includePartialMessages:
           responseMode === 'stream' || reasoningConfig.mode === 'thinking',
-        maxTurns: 3,
         model: process.env.CLAUDE_MODEL?.trim() || 'sonnet',
         outputFormat: {
           type: 'json_schema',
@@ -144,21 +147,16 @@ async function runTurn(
           preset: 'claude_code',
           append:
             analysisContract === 'multimodal'
-              ? `${incidentAnalysisInstructions}\n${multimodalEvidenceInstructions}\n${incidentMetricToolInstructions}`
-              : `${incidentAnalysisInstructions}\n${incidentMetricToolInstructions}`,
+              ? `${incidentAnalysisInstructions}\n${multimodalEvidenceInstructions}\n${evidenceToolInstructions}`
+              : `${incidentAnalysisInstructions}\n${evidenceToolInstructions}`,
           excludeDynamicSections: true,
         },
         thinking: reasoningConfig.thinking,
         ...(reasoningConfig.effort
           ? { effort: reasoningConfig.effort }
           : {}),
-        tools: [],
-        mcpServers: {
-          sentinel: incidentMetricTool.server,
-        },
-        allowedTools: [incidentMetricToolName],
       },
-    })) {
+    }), investigation)) {
       if (
         message.type === 'system' &&
         message.subtype === 'thinking_tokens'
@@ -199,13 +197,13 @@ async function runTurn(
         for (const block of message.message.content) {
           if (
             block.type === 'tool_use' &&
-            block.name === incidentMetricToolName
+            evidenceToolNames.includes(block.name)
           ) {
-            incidentMetricTool.trace.request = {
+            evidenceTools.trace.requests.push({
               id: block.id,
               name: block.name,
               input: block.input,
-            };
+            });
           }
         }
 
@@ -216,13 +214,13 @@ async function runTurn(
         for (const block of message.message.content) {
           if (
             block.type === 'tool_result' &&
-            block.tool_use_id === incidentMetricTool.trace.request?.id
+            evidenceTools.trace.requests.some((request) => request.id === block.tool_use_id)
           ) {
-            incidentMetricTool.trace.result = {
+            evidenceTools.trace.results.push({
               tool_use_id: block.tool_use_id,
               content: block.content,
               is_error: block.is_error ?? false,
-            };
+            });
           }
         }
 
@@ -265,24 +263,6 @@ async function runTurn(
           `Claude structured output (rejected): ${JSON.stringify(message.structured_output, null, 2)}\n`,
         );
         throw error;
-      }
-
-      if (incidentMetricTool.trace.request) {
-        console.log(
-          `Tool-use lifecycle:\n${JSON.stringify(
-            {
-              '1_claude_requests_tool': incidentMetricTool.trace.request,
-              '2_application_validates_input':
-                incidentMetricTool.trace.validation ?? null,
-              '3_application_executes_handler':
-                incidentMetricTool.trace.execution ?? null,
-              '4_application_returns_tool_result':
-                incidentMetricTool.trace.result ?? null,
-            },
-            null,
-            2,
-          )}\n`,
-        );
       }
 
       if (wroteStreamedOutput) {
@@ -331,15 +311,21 @@ async function runTurn(
       // ),
       // );
     }
+    acceptanceGuard.assertCompleted(abortController.signal);
   } catch (error: unknown) {
+    if (investigation.terminalReason) investigation.assertActive();
     if (abortController.signal.aborted) {
       throw acceptanceGuard.createInterruptionFailure(error);
     }
 
     throw error;
+  } finally {
+    if (evidenceTools.trace.audit.length > 0) {
+      console.log(`Tool-use lifecycle:\n${JSON.stringify(evidenceTools.trace, null, 2)}\n`);
+    }
+    evidenceTools.close();
   }
 
-  acceptanceGuard.assertCompleted(abortController.signal);
 }
 
 async function main(): Promise<void> {
@@ -399,7 +385,7 @@ async function main(): Promise<void> {
   console.log('Every incident analysis is parsed and schema-validated.');
   console.log('Prompt caching is automatic for the stable system contract.');
   console.log(
-    'The read-only incident metric tool is available automatically when needed.',
+    'Read-only service metrics and dependency health tools are available when needed.',
   );
   console.log(
     'Complete mode waits for the Agent SDK final result; it is not a raw non-streaming Messages API request.\n',

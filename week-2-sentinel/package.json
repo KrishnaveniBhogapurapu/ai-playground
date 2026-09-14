@@ -4,13 +4,16 @@
   "description": "",
   "main": "dist/index.js",
   "scripts": {
-    "test": "npm run build && node --test dist/tests/sentinel.test.js",
+    "test": "npm run build && node --test dist/tests/*.test.js",
     "build": "tsc -p tsconfig.json",
     "prestart": "npm run build",
     "start": "node dist/index.js",
     "start:direct": "npm run build && node dist/index.js --reasoning direct",
     "start:thinking": "npm run build && node dist/index.js --reasoning thinking",
-    "validate:json": "node dist/experiments/validate-prompt-json.js"
+    "validate:json": "node dist/experiments/validate-prompt-json.js",
+    "week3:verify": "npm run build && node dist/experiments/week3-verify.js",
+    "week3:sdk": "npm run build && node dist/experiments/week3-live.js sdk",
+    "week3:injection": "npm run build && node dist/experiments/week3-live.js sdk-injection"
   },
   "keywords": [],
   "author": "",

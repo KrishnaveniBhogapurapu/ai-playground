@@ -1,0 +1,303 @@
+{
+  "evidence_kind": "live-model-attempt",
+  "started_at": "2026-09-14T21:07:43.480Z",
+  "mode": "sdk",
+  "result": {
+    "accepted": true,
+    "analysis": {
+      "facts": [
+        "checkout-api error_rate was 0.4% at 2026-08-21T10:00:00Z (source: fictional Sentinel INC-104 fixture)",
+        "checkout-api error_rate was 9% at 2026-08-21T10:04:00Z (source: fictional Sentinel INC-104 fixture)",
+        "payment-provider dependency status was 'degraded' at 2026-08-21T10:04:00Z, with detail noting intermittent payment-provider errors (source: fictional Sentinel INC-104 fixture)",
+        "The payment-provider health snapshot explicitly states root cause is unconfirmed",
+        "Deployment dep-1842 reportedly completed at 2026-08-21T10:01:00Z (per user-supplied incident context, not retrieved via tool)",
+        "Dependency health snapshots are only available at 10:04:00Z; no other timestamps exist in this fixture"
+      ],
+      "assumptions": [
+        "That dep-1842's completion time (10:01 UTC) is accurately reported and relevant to checkout-api",
+        "That general knowledge about deployments or payment-provider outages causing error spikes applies here, absent incident-specific confirmation",
+        "That no other concurrent changes (config, infra, traffic spikes) occurred in this window"
+      ],
+      "hypotheses": [
+        {
+          "claim": "The payment-provider degradation contributed to the checkout-api error_rate spike at 10:04 UTC",
+          "supporting_evidence": [
+            "Error rate rose from 0.4% to 9% between 10:00 and 10:04 UTC, coinciding with the 10:04 UTC degraded payment-provider status"
+          ],
+          "contradicting_evidence": [
+            "The dependency snapshot explicitly states root cause is unconfirmed",
+            "Only one dependency snapshot exists (10:04 UTC), so no pre/post comparison is possible to establish timing or persistence of degradation",
+            "Correlation alone does not establish causation"
+          ]
+        },
+        {
+          "claim": "Deployment dep-1842 (completed 10:01 UTC) contributed to the error_rate spike",
+          "supporting_evidence": [
+            "dep-1842 completed at 10:01 UTC, shortly before the error_rate rose to 9% at 10:04 UTC"
+          ],
+          "contradicting_evidence": [
+            "No tool evidence (metrics or dependency health) references dep-1842 or deployment status",
+            "User explicitly states causation is unconfirmed",
+            "No error_rate observation exists between 10:01 and 10:04 to show the spike began after deployment rather than before"
+          ]
+        }
+      ],
+      "missing_information": [
+        "Error_rate observations between 10:00 and 10:04, and after 10:04, to characterize the spike's onset and duration",
+        "Dependency health at times other than 10:04 UTC (e.g., before/after) to see if degradation preceded or followed the error spike",
+        "Database dependency health during this window, not yet checked",
+        "Deployment logs or change records for dep-1842 (content, scope, affected services)",
+        "Any correlated payment-provider-side incident reports or provider status pages",
+        "Whether the 9% error rate persisted, worsened, or recovered after 10:04 UTC"
+      ],
+      "reversible_next_actions": [
+        "Query get_service_metrics for a wider or adjacent window (subject to the 1-hour/100-observation limits) to see error_rate trend before 10:00 and after 10:04",
+        "Query get_dependency_health for the database dependency at 10:04 UTC to rule out/in a second contributing factor",
+        "Review dep-1842 deployment logs/diff (outside current tool scope) to assess plausibility of causation without asserting it",
+        "Correlate with payment-provider's own status/incident feed if available, as independent confirmation",
+        "Hold off on any rollback or remediation decision until additional temporal evidence separates deployment-timing correlation from dependency degradation"
+      ],
+      "uncertainty": {
+        "level": "high",
+        "reason": "Only two error_rate data points and a single dependency snapshot are available; both the deployment and the payment-provider degradation are time-correlated with the spike but neither is confirmed as cause, and no data exists to sequence events precisely between 10:00 and 10:04 or beyond 10:04."
+      }
+    },
+    "trace": {
+      "requests": [
+        {
+          "id": "toolu_01NSHnUKLyYA8XWjzVK7KmD4",
+          "name": "mcp__sentinel__get_service_metrics",
+          "input": {
+            "service": "checkout-api",
+            "metric": "error_rate",
+            "start_time": "2026-08-21T10:00:00Z",
+            "end_time": "2026-08-21T10:10:00Z"
+          }
+        },
+        {
+          "id": "toolu_01AJbJ6sHeYKvMAEyArfYePf",
+          "name": "mcp__sentinel__get_dependency_health",
+          "input": {
+            "service": "checkout-api",
+            "dependency": "payment-provider",
+            "requested_time": "2026-08-21T10:04:00Z"
+          }
+        },
+        {
+          "id": "toolu_01X75aXBTaitb7uKAHUBZWoK",
+          "name": "StructuredOutput",
+          "input": {
+            "facts": [
+              "checkout-api error_rate was 0.4% at 2026-08-21T10:00:00Z (source: fictional Sentinel INC-104 fixture)",
+              "checkout-api error_rate was 9% at 2026-08-21T10:04:00Z (source: fictional Sentinel INC-104 fixture)",
+              "payment-provider dependency status was 'degraded' at 2026-08-21T10:04:00Z, with detail noting intermittent payment-provider errors (source: fictional Sentinel INC-104 fixture)",
+              "The payment-provider health snapshot explicitly states root cause is unconfirmed",
+              "Deployment dep-1842 reportedly completed at 2026-08-21T10:01:00Z (per user-supplied incident context, not retrieved via tool)",
+              "Dependency health snapshots are only available at 10:04:00Z; no other timestamps exist in this fixture"
+            ],
+            "assumptions": [
+              "That dep-1842's completion time (10:01 UTC) is accurately reported and relevant to checkout-api",
+              "That general knowledge about deployments or payment-provider outages causing error spikes applies here, absent incident-specific confirmation",
+              "That no other concurrent changes (config, infra, traffic spikes) occurred in this window"
+            ],
+            "hypotheses": [
+              {
+                "claim": "The payment-provider degradation contributed to the checkout-api error_rate spike at 10:04 UTC",
+                "supporting_evidence": [
+                  "Error rate rose from 0.4% to 9% between 10:00 and 10:04 UTC, coinciding with the 10:04 UTC degraded payment-provider status"
+                ],
+                "contradicting_evidence": [
+                  "The dependency snapshot explicitly states root cause is unconfirmed",
+                  "Only one dependency snapshot exists (10:04 UTC), so no pre/post comparison is possible to establish timing or persistence of degradation",
+                  "Correlation alone does not establish causation"
+                ]
+              },
+              {
+                "claim": "Deployment dep-1842 (completed 10:01 UTC) contributed to the error_rate spike",
+                "supporting_evidence": [
+                  "dep-1842 completed at 10:01 UTC, shortly before the error_rate rose to 9% at 10:04 UTC"
+                ],
+                "contradicting_evidence": [
+                  "No tool evidence (metrics or dependency health) references dep-1842 or deployment status",
+                  "User explicitly states causation is unconfirmed",
+                  "No error_rate observation exists between 10:01 and 10:04 to show the spike began after deployment rather than before"
+                ]
+              }
+            ],
+            "missing_information": [
+              "Error_rate observations between 10:00 and 10:04, and after 10:04, to characterize the spike's onset and duration",
+              "Dependency health at times other than 10:04 UTC (e.g., before/after) to see if degradation preceded or followed the error spike",
+              "Database dependency health during this window, not yet checked",
+              "Deployment logs or change records for dep-1842 (content, scope, affected services)",
+              "Any correlated payment-provider-side incident reports or provider status pages",
+              "Whether the 9% error rate persisted, worsened, or recovered after 10:04 UTC"
+            ],
+            "reversible_next_actions": [
+              "Query get_service_metrics for a wider or adjacent window (subject to the 1-hour/100-observation limits) to see error_rate trend before 10:00 and after 10:04",
+              "Query get_dependency_health for the database dependency at 10:04 UTC to rule out/in a second contributing factor",
+              "Review dep-1842 deployment logs/diff (outside current tool scope) to assess plausibility of causation without asserting it",
+              "Correlate with payment-provider's own status/incident feed if available, as independent confirmation",
+              "Hold off on any rollback or remediation decision until additional temporal evidence separates deployment-timing correlation from dependency degradation"
+            ],
+            "uncertainty": {
+              "level": "high",
+              "reason": "Only two error_rate data points and a single dependency snapshot are available; both the deployment and the payment-provider degradation are time-correlated with the spike but neither is confirmed as cause, and no data exists to sequence events precisely between 10:00 and 10:04 or beyond 10:04."
+            }
+          }
+        }
+      ],
+      "results": [
+        {
+          "tool_use_id": "toolu_01NSHnUKLyYA8XWjzVK7KmD4",
+          "content": "{\"ok\":true,\"data\":{\"source\":\"fictional Sentinel INC-104 fixture\",\"service\":\"checkout-api\",\"metric\":\"error_rate\",\"unit\":\"percent\",\"start_time\":\"2026-08-21T10:00:00Z\",\"end_time\":\"2026-08-21T10:10:00Z\",\"observations\":[{\"time\":\"2026-08-21T10:00:00Z\",\"value\":0.4},{\"time\":\"2026-08-21T10:04:00Z\",\"value\":9}],\"truncated\":false}}",
+          "is_error": false
+        },
+        {
+          "tool_use_id": "toolu_01AJbJ6sHeYKvMAEyArfYePf",
+          "content": "{\"ok\":true,\"data\":{\"source\":\"fictional Sentinel INC-104 fixture\",\"service\":\"checkout-api\",\"dependency\":\"payment-provider\",\"requested_time\":\"2026-08-21T10:04:00Z\",\"observed_at\":\"2026-08-21T10:04:00Z\",\"status\":\"degraded\",\"detail\":\"Synthetic snapshot reports intermittent payment-provider errors. Root cause is unconfirmed.\"}}",
+          "is_error": false
+        },
+        {
+          "tool_use_id": "toolu_01X75aXBTaitb7uKAHUBZWoK",
+          "content": "Structured output provided successfully",
+          "is_error": false
+        }
+      ],
+      "audit": [
+        {
+          "id": "toolu_01NSHnUKLyYA8XWjzVK7KmD4",
+          "requested_action": "get_service_metrics",
+          "input": {
+            "service": "checkout-api",
+            "metric": "error_rate",
+            "start_time": "2026-08-21T10:00:00Z",
+            "end_time": "2026-08-21T10:10:00Z"
+          },
+          "identity": "sentinel-learner",
+          "validation": "accepted",
+          "authorization": "allowed",
+          "execution": "succeeded",
+          "policy": "sentinel-fictional-read-only-v1",
+          "human_approval_required": false,
+          "reason": "Validated read-only evidence returned as untrusted data.",
+          "result": {
+            "ok": true,
+            "data": {
+              "source": "fictional Sentinel INC-104 fixture",
+              "service": "checkout-api",
+              "metric": "error_rate",
+              "unit": "percent",
+              "start_time": "2026-08-21T10:00:00Z",
+              "end_time": "2026-08-21T10:10:00Z",
+              "observations": [
+                {
+                  "time": "2026-08-21T10:00:00Z",
+                  "value": 0.4
+                },
+                {
+                  "time": "2026-08-21T10:04:00Z",
+                  "value": 9
+                }
+              ],
+              "truncated": false
+            }
+          },
+          "elapsed_ms": 3923
+        },
+        {
+          "id": "toolu_01AJbJ6sHeYKvMAEyArfYePf",
+          "requested_action": "get_dependency_health",
+          "input": {
+            "service": "checkout-api",
+            "dependency": "payment-provider",
+            "requested_time": "2026-08-21T10:04:00Z"
+          },
+          "identity": "sentinel-learner",
+          "validation": "accepted",
+          "authorization": "allowed",
+          "execution": "succeeded",
+          "policy": "sentinel-fictional-read-only-v1",
+          "human_approval_required": false,
+          "reason": "Validated read-only evidence returned as untrusted data.",
+          "result": {
+            "ok": true,
+            "data": {
+              "source": "fictional Sentinel INC-104 fixture",
+              "service": "checkout-api",
+              "dependency": "payment-provider",
+              "requested_time": "2026-08-21T10:04:00Z",
+              "observed_at": "2026-08-21T10:04:00Z",
+              "status": "degraded",
+              "detail": "Synthetic snapshot reports intermittent payment-provider errors. Root cause is unconfirmed."
+            }
+          },
+          "elapsed_ms": 6266
+        }
+      ]
+    },
+    "elapsed_ms": 21518,
+    "metadata": {
+      "model_usage": {
+        "claude-haiku-4-5-20251001": {
+          "inputTokens": 1041,
+          "outputTokens": 18,
+          "cacheReadInputTokens": 0,
+          "cacheCreationInputTokens": 0,
+          "webSearchRequests": 0,
+          "costUSD": 0.001131,
+          "contextWindow": 200000,
+          "maxOutputTokens": 32000,
+          "canonicalModel": "claude-haiku-4-5",
+          "provider": "firstParty"
+        },
+        "claude-sonnet-5": {
+          "inputTokens": 6,
+          "outputTokens": 1848,
+          "cacheReadInputTokens": 10193,
+          "cacheCreationInputTokens": 818,
+          "webSearchRequests": 0,
+          "costUSD": 0.0238026,
+          "contextWindow": 1000000,
+          "maxOutputTokens": 64000,
+          "canonicalModel": "claude-sonnet-5",
+          "provider": "firstParty"
+        }
+      },
+      "usage": {
+        "input_tokens": 6,
+        "cache_creation_input_tokens": 818,
+        "cache_read_input_tokens": 10193,
+        "output_tokens": 1848,
+        "output_tokens_details": {
+          "thinking_tokens": 0
+        },
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 818,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "not_available",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 1506,
+            "cache_read_input_tokens": 3691,
+            "cache_creation_input_tokens": 378,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 378
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "standard"
+      },
+      "cost_usd": 0.0249336,
+      "model_turns": 4
+    }
+  }
+}

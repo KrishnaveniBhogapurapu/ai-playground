@@ -1,4 +1,4 @@
-# Week 2 Sentinel
+# Sentinel — Week 2 foundation and Week 3 tools
 
 Sentinel is a TypeScript command-line application for evidence-aware incident analysis with Claude. It accepts incident text or a fictional dashboard image and returns either a schema-validated analysis or an explicit typed failure.
 
@@ -67,7 +67,19 @@ Commands available inside Sentinel:
 - `Ctrl+C` during a request: cancel the active request and reject incomplete output.
 - `Ctrl+C` when idle or again after cancellation: exit the CLI.
 
-The read-only `get_incident_metric` application tool is registered automatically. There is no separate tool mode. Claude may request it when an `INC-104` analysis asks Sentinel to retrieve the checkout error rate instead of supplying the value directly.
+The read-only `get_service_metrics` and `get_dependency_health` tools are registered automatically. They replace Week 2's fixed `get_incident_metric` lookup. Both use fictional INC-104 fixtures; there is no separate tool mode.
+
+For the Week 3 investigation, ask:
+
+```text
+Investigate fictional INC-104 for checkout-api. Retrieve error_rate between 2026-08-21T10:00:00Z and 2026-08-21T10:10:00Z, then check payment-provider health at 2026-08-21T10:04:00Z. Keep observations separate from hypotheses and explain what remains unknown before recommending rollback.
+```
+
+The fixture date is a learning convention. Dependency statuses are synthetic observations, not independently verified incident facts. The [Week 3 learning note](experiments/week-3/learning-note.md) contains the architecture comparison, diagrams, reflection, and knowledge-check answers.
+
+Week 3 applies a host-controlled read-only policy before tool execution. It limits each investigation to six operational tool attempts, eight model turns, and 90 seconds, with a two-second timeout per tool. Tool inputs are limited to 8 KiB and result envelopes to 16 KiB; the SDK also has a $1 cost budget. Unknown identities and unapproved actions are denied. Failures are recorded explicitly. SDK tool pre-approval has been replaced by a deterministic `PreToolUse` policy hook and a deny-by-default fallback.
+
+All 35 tests pass. The [verification report](experiments/week-3/verification-report.json) records 13 repeatable scenarios covering tool execution, permissions, failures, and limits. The [normal SDK investigation](experiments/week-3/runs/sdk-2026-09-14T21-07-43.480Z.json) and [injected-output investigation](experiments/week-3/runs/sdk-injection-2026-09-14T21-07-33.325Z.json) both succeeded using Claude through the Agent SDK.
 
 ## Output contract
 
@@ -113,6 +125,9 @@ Sentinel distinguishes input, configuration, integration, runtime, and model-out
 | `npm run start:direct` | Build and run the direct-response comparison configuration |
 | `npm run start:thinking` | Build and run the thinking comparison configuration |
 | `npm run validate:json -- <file>` | Validate a recorded text incident analysis |
+| `npm run week3:verify` | Record 13 deterministic Week 3 verification scenarios; no model call |
+| `npm run week3:sdk` | Run and record the bounded live SDK investigation |
+| `npm run week3:injection` | Run and record the live SDK investigation with injected tool content |
 
 ## Project structure
 
@@ -161,6 +176,8 @@ week-2-sentinel/
 
 - All incidents, dashboard data, and tool data are fictional.
 - The application uses the Claude Agent SDK with `CLAUDE_CODE_OAUTH_TOKEN`. Complete mode waits for the SDK's final result; it is not a raw non-streaming Messages API call.
-- The incident metric tool reads a fixed in-memory Week 2 record, not a real monitoring system.
+- Evidence tools read fixed in-memory fictional snapshots. Metrics support checkout-api/error_rate within a maximum one-hour range, up to 100 observations. Dependency health supports database and payment-provider at exactly 2026-08-21T10:04:00Z. Missing snapshots return explicit errors.
+- The custom-loop comparison uses scripted model responses, so its timings cannot be compared with the SDK's actual model-request timings.
+- Authorization uses a trusted fictional identity, not production authentication. Tool text cannot change grants or enable remediation. Schema validity and a successful tool call do not prove all narrative claims are correct.
 - Tool input validation and schema validation do not prove that the model's conclusions are supported. Human or policy-based content review is still required.
 - No incident remediation action is executed by Sentinel.
